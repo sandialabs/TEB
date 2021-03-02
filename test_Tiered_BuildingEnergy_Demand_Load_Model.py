@@ -38,17 +38,20 @@ Created on Fri Oct  9 07:54:43 2020
 
 @author: dlvilla
 """
+if __name__ == "__main__":
+    import Tiered_BuildingEnergy_Demand_Load_Model as ec_be
+    from Complex_Appliances import Wall_AC_Unit
+    from Thermodynamics import thermodynamic_properties as tp
+    tp = tp()
 import numpy as np
 import unittest
-import Tiered_BuildingEnergy_Demand_Load_Model as ec_be
 from matplotlib import pyplot as plt
 import pandas as pd
 import statsmodels.api as sm
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
-from Complex_Appliances import Wall_AC_Unit
-from Thermodynamics import thermodynamic_properties as tp
-tp = tp()
+
+
 
 import os
 

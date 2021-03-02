@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-
 License Statement:
 
 Copyright 2021 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
@@ -62,8 +61,6 @@ class thermodynamic_properties(object):
     water_vapor_heat_capacity = 1860 #J/kg
     RdRvRatio = h2o_M / air_M
     
-    
-    
     def __init__(self):
         #These are water vapor specific and are therefore not included as inputs
         # vapor pressure coefficients.
@@ -123,7 +120,7 @@ class thermodynamic_properties(object):
         
         self.warnings = []
         
-    def rho_water_vapor(P,T):
+    def rho_water_vapor(self,P,T):
         Tk = T + self.CelciusToKelvin
         return P / (self.R_gas / self.h2o_M * Tk) 
     

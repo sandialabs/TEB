@@ -149,6 +149,14 @@ class TieredAnalysis(object):
             pool = mp.Pool(mp.cpu_count()-1)
             
         dat = ReadInputSpreadSheet(tiered_load_spreadsheet_path)
+        # remove invalid columns with "Unamed:" in the string
+        for key,val in dat.inputs.items():
+            if key == "AC":
+                uuuu = 1
+            for col in val.columns:
+                if "Unnamed: " in col:
+                    val.drop([col],axis=1,inplace=True)
+        
         run_name = os.path.basename(tiered_load_spreadsheet_path).split(".")[0]
         # reassure the input is correct (spreadsheets! Ugghh)
         # TODO get this working
@@ -514,6 +522,7 @@ class TieredAnalysis(object):
         # populate the AC unit objects - tables use rows instead of columns 
         # for each unit. Sorry for the inconsistency!
         df_ac = DF_ops.df_col_index_and_drop(dat.inputs,"AC","Description")
+        
         df_therm = dat.inputs['ACThermostat']
         df_coef = dat.inputs['ACcoef']
         ac = {}
@@ -524,30 +533,33 @@ class TieredAnalysis(object):
             ac_name = colname
             
             df_therm_temp = df_therm.iloc[:,1:][df_therm["AC Unit"] == ac_name]
-            # set thermostats - TODO - these really need to be moved to the
-            # building level as a schedule that would allow some measure of 
-            # efficiency.
-            if thermostat_heat is None:
-                thermostat_heat = df_therm_temp[df_therm_temp["Type"]=="Heating (⁰C)"]
+            if len(df_therm_temp) != 0:
+                # set thermostats - TODO - these really need to be moved to the
+                # building level as a schedule that would allow some measure of 
+                # efficiency.
+                if thermostat_heat is None:
+                    thermostat_heat = df_therm_temp[df_therm_temp["Type"]=="Heating (⁰C)"]
+                else:
+                    if (thermostat_heat.values != df_therm_temp[df_therm_temp["Type"]=="Heating (⁰C)"]).values.any():
+                        raise ValueError("All Heating must have the same thermostat values (only chang accross Tiers!)")
+                        
+                if thermostat_cool is None:
+                    thermostat_cool = df_therm_temp[df_therm_temp["Type"]=="Cooling (⁰C)"]
+                else:
+                    if (thermostat_cool.values != df_therm_temp[df_therm_temp["Type"]=="Cooling (⁰C)"]).values.any():
+                        raise ValueError("All AC must have the same cooling thermostat values (only change accross Tiers!)")
+                
+                ac[ac_name] = Wall_AC_Unit(TC=ac_col['Name Plate Total Cooling (TC) (W)'],
+                                           SCfrac=ac_col['Sensible Cooling Fraction'],
+                                           derate_frac=ac_col['Name Plate Derate Fraction'],
+                                           npPower=ac_col['Power input (W)'],
+                                           flow_rated=ac_col['Air flow rate (m3/h)'],
+                                           df_coef=df_coef.iloc[:,1:][df_coef["AC Unit"] == ac_name],
+                                           df_thermostat=df_therm_temp,
+                                           tier=tier,
+                                           Name=ac_name)
             else:
-                if (thermostat_heat.values != df_therm_temp[df_therm_temp["Type"]=="Heating (⁰C)"]).values.any():
-                    raise ValueError("All Heating must have the same thermostat values (only chang accross Tiers!)")
-                    
-            if thermostat_cool is None:
-                thermostat_cool = df_therm_temp[df_therm_temp["Type"]=="Cooling (⁰C)"]
-            else:
-                if (thermostat_cool.values != df_therm_temp[df_therm_temp["Type"]=="Cooling (⁰C)"]).values.any():
-                    raise ValueError("All AC must have the same cooling thermostat values (only change accross Tiers!)")
-            
-            ac[ac_name] = Wall_AC_Unit(TC=ac_col['Name Plate Total Cooling (TC) (W)'],
-                                       SCfrac=ac_col['Sensible Cooling Fraction'],
-                                       derate_frac=ac_col['Name Plate Derate Fraction'],
-                                       npPower=ac_col['Power input (W)'],
-                                       flow_rated=ac_col['Air flow rate (m3/h)'],
-                                       df_coef=df_coef.iloc[:,1:][df_coef["AC Unit"] == ac_name],
-                                       df_thermostat=df_therm_temp,
-                                       tier=tier,
-                                       Name=ac_name)
+                print("An empty column must exist in the input spreadsheet for the AC sheet!")
         self.thermostat_heat = thermostat_heat
         self.thermostat_cool = thermostat_cool
         
