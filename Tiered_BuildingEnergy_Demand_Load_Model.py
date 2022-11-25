@@ -98,6 +98,7 @@ import os
 import numpy as np
 import pandas as pd
 import datetime
+import pdb
 from matplotlib import pyplot as plt
 from matplotlib import rc
 from RC_BuildingSimulator import rc_simulator as rcbs
@@ -112,6 +113,12 @@ from copy import deepcopy
 from matplotlib import pyplot as plt
 from numbers import Number
 
+class Unit_Convert():
+    
+    hours_to_seconds = 3600.0
+    kW_to_Watts = 1000.0
+    days_to_hours = 24
+    kWh_per_day_to_AvgWatts_per_hour = kW_to_Watts
 
 def parallel_building_run(building,master_building_name,tier,building_name,stop_time,troubleshoot):
     # inputtup = inputdict["main"]
@@ -135,15 +142,17 @@ class TieredAnalysis(object):
     
     # this tier map provides the number of tiers that are turned on given
     # a specific tier
-    tier_map = {"Non-critical":["Non-critical","Tier 1","Tier 2","Tier 3"],
+    noncrit_tier = "Non-critical"
+    tier_map = {noncrit_tier:[noncrit_tier,"Tier 1","Tier 2","Tier 3"],
                 "Tier 3":["Tier 1","Tier 2","Tier 3"],
                 "Tier 2":["Tier 1","Tier 2"],
                 "Tier 1":["Tier 1"]}
     months = np.array(["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"])
     
     def __init__(self,tiered_load_spreadsheet_path,troubleshoot=False,
-                 stop_time=8760,results_path="Results",run_parallel=False):
-
+                 stop_time=8760,results_path="Results",run_parallel=False,run_name=""):
+        self.run_name = run_name
+        self.result_path = results_path
         if run_parallel:
             import multiprocessing as mp
             pool = mp.Pool(mp.cpu_count()-1)
@@ -151,8 +160,6 @@ class TieredAnalysis(object):
         dat = ReadInputSpreadSheet(tiered_load_spreadsheet_path)
         # remove invalid columns with "Unamed:" in the string
         for key,val in dat.inputs.items():
-            if key == "AC":
-                uuuu = 1
             for col in val.columns:
                 if "Unnamed: " in col:
                     val.drop([col],axis=1,inplace=True)
@@ -272,7 +279,7 @@ class TieredAnalysis(object):
                 names and the MasterBuilding name with weights for each building.
                 
         """
-        conserved_columns = ["SolarGains","PlugInFans","Appliances",
+        conserved_columns = ["SolarGains","PlugInFans","StaticElectricLoads",
                              "Refrigerators","Wall_ACs","Lights",
                              "TotalElectricity","UnmetCooling","Occupants",
                              "UnmetHeating","HeatLoadToMeetThermostat","Central_AC"]
@@ -317,7 +324,10 @@ class TieredAnalysis(object):
                     
                     # normalize by the total area desired.    
                     if sum_weights == 0:
-                        raise ValueError("None of the buildings for " + master_building_name + " have a simulation. Please correct the input!")
+                        # do nothing
+                        pass
+                        #import pdb; pdb.set_trace()
+                        #raise ValueError("None of the buildings for " + master_building_name + " have a simulation. Please correct the input!")
                     else:
                         # normfact renormalizes to the total square footage desired.
                         if df_total is None:
@@ -325,7 +335,8 @@ class TieredAnalysis(object):
                         else:
                             df_sum.index = df_total.index
                             df_total = df_total + normfact * df_sum / sum_weights
-                          
+            if df_total is None:
+                raise ValueError("None of the buildings for " + master_building_name + " have a simulation. Please correct the input!")
             # add columns so this can be appended to the final result.
             df_total["MasterBuilding"] = combined_name
             # WARNING! we 
@@ -344,16 +355,71 @@ class TieredAnalysis(object):
         
         if plot_results:
             total_use = self._plot_results(df_final,title)
-            
-        eui = np.array(total_use)/total_area
+            self._plot_daily_profiles(df_final,combined_name)
+                
+        eui = np.array(total_use)/total_area/Unit_Convert.kW_to_Watts
         
-        if not save_file_name is None:
+        if not save_file_name is None:            
             df_final.to_csv(save_file_name)
             
             
         
         return df_final, eui
+    
+    def _plot_daily_profiles(self,df_final,combined_name):
+        min_day_ = None
+        max_day_ = None
+        maxval = -1e6
+        minval = 1e6
+        fig,axl = plt.subplots(1,2,figsize=(10,5))
+        for tier in self.tier_map.keys():
+            df = deepcopy(df_final[df_final['Tier']==tier])
+            df.index = df['Date']
+            df_daily = df.resample('1D').sum()['TotalElectricity']
+            min_day = df_daily.idxmin()
+            max_day = df_daily.idxmax()
             
+            # assure the peaks happen on the same day as Non-critical!
+            if not min_day_ is None:
+                if min_day != min_day_:
+                    print("Warning!:" + tier + "minimum day happened on " + str(min_day) + " but the non-critical minimum day is " + str(min_day_))
+                    min_day = min_day_
+            else:
+                min_day_ = min_day
+            if not max_day_ is None:
+                if max_day != max_day_:
+                    print("Warning!:" + tier + "maximum day happened on " + str(max_day) + " but the non-critical maximum day is " + str(max_day_))
+                    max_day = max_day_
+            else:
+                max_day_ = max_day
+                
+            df_max_day = df[(df.index.month == max_day.month) & (df.index.day == max_day.day) & (df.index.year == max_day.year)]
+            df_min_day = df[(df.index.month == min_day.month) & (df.index.day == min_day.day) & (df.index.year == min_day.year)]
+            (df_min_day['TotalElectricity']/Unit_Convert.kW_to_Watts).plot(ax=axl[0],rot=60,fontsize=12,grid=True)
+            (df_max_day['TotalElectricity']/Unit_Convert.kW_to_Watts).plot(ax=axl[1],label=tier,rot=60,fontsize=12,grid=True)
+            
+            cur_minval = df_min_day['TotalElectricity'].min() 
+            cur_maxval = df_max_day['TotalElectricity'].max()
+            
+            if cur_minval < minval:
+                minval = cur_minval
+            if cur_maxval > maxval:
+                maxval = cur_maxval
+        
+        for ax in axl:
+            ax.set_ylim([minval*0.99/Unit_Convert.kW_to_Watts,maxval*1.01/Unit_Convert.kW_to_Watts])
+            
+        axl[0].set_xlabel("Minimum Day")
+        axl[1].set_xlabel("Maximum Day")
+        axl[1].legend(bbox_to_anchor=(1.00,0.7))
+        for ax in axl:
+            ylim =  ax.get_ylim()
+            ax.set_ylim([0,ylim[1]])
+        fig.suptitle(combined_name+ " Min/Max Load Profiles")
+        axl[0].set_ylabel("Hourly Average Power (kW)")
+        plt.tight_layout()
+        plt.savefig(os.path.join(self.result_path,"HourlyMaxMinDayProfiles_" + combined_name + ".png"))
+        
     def _plot_results(self,df_final,title):
         """
         plot total electricity per tier and monthly contribution plots for different
@@ -363,7 +429,7 @@ class TieredAnalysis(object):
         font = {'family':'normal','weight':'normal','size':14}
         rc('font', **font)
         
-        ElectricityUse = ["PlugInFans","Appliances","Refrigerators","Wall_ACs",
+        ElectricityUse = ["PlugInFans","StaticElectricLoads","Refrigerators","Wall_ACs",
                           "Lights","Central_AC"]
         
         total_yearly_use = []
@@ -391,7 +457,7 @@ class TieredAnalysis(object):
 
         #Save the monthly plot of energy use break-down
         plt.tight_layout()
-        plt.savefig(os.path.join("Results",monthly_title + ".png"),fig=figb)
+        plt.savefig(os.path.join(self.result_path,monthly_title + self.run_name + ".png"),fig=figb)
         
         
         ax.set_ylabel("Total Electricity (W)")
@@ -399,7 +465,7 @@ class TieredAnalysis(object):
         ax.set_title(title)
         plt.sca(ax)
         plt.tight_layout()
-        plt.savefig(os.path.join("Results",title + ".png"),bbox_inches="tight",fig=fig)
+        plt.savefig(os.path.join(self.result_path,title + self.run_name + ".png"),bbox_inches="tight",fig=fig)
 
         return total_yearly_use
         
@@ -511,7 +577,7 @@ class TieredAnalysis(object):
                                    R_total = dfr.loc['Fridge universal (convection and conduction) resistance (m2*K/W)',fridge_name],
                                    T_diff = dfr.loc['Temperature difference between ambient and condenser and fridge and evaporator',fridge_name],
                                    T_inside = dfr.loc['Constant average temperature of fridge compartment (K) Tf',fridge_name],
-                                   ach_mix=dfr.loc['Peak average air mixing rate from door opening (ACH)',fridge_name],
+                                   ach_mix=dfr.loc['Average Air Changes per Hour (ACH)',fridge_name],
                                    ach_schedule=dat.schedules[dfr.loc['Name of air mixing rate from door opening',fridge_name]],
                                    frac_Carnot = dfr.loc['Fraction of Reverse Carnot Efficiency',fridge_name],
                                    fan_power = dfr.loc['Average Fan Power (W)',fridge_name],
@@ -636,12 +702,12 @@ class TieredAnalysis(object):
             load_dict = {}
             # bstat has already been filtered for building and tier_list
             for bname, row in bstat.iterrows():
-                app_sch = self._find_schedule(dat, row["Schedule"])
+                app_sch = self._find_schedule(dat, row["Schedule (Fraction of Daily Use-Will be normalized to sum to 1 over 24 hours.)"])
                 if not app_sch is None:
                     if row["Per Area (W = False or W/m2 = True?)"]:
-                        app_peak = row["Power (W)"] # already in W/m2
+                        app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Daily Power Consumption (kWh/day)"] # already in W/m2
                     else: # is on a W basis and needs to be on a W/m2 basis!
-                        app_peak = row["Power (W)"] / building_area
+                        app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Daily Power Consumption (kWh/day)"] / building_area
                 # verify that the tier and load name are unique
                 unique_key = row["Load Name"] + "_" + row["Tier"]
                 if unique_key in load_dict.keys():
@@ -650,29 +716,35 @@ class TieredAnalysis(object):
                                      " input spreadsheet to not include repeat" +
                                      " Tier and Load Names for a given building!")
                 else:
-
-                    load_dict[unique_key] = {"Peak":app_peak,
+                    load_dict[unique_key] = {"Wh_per_day_per_m2":app_peak,
                                              "Sch":app_sch,
                                              "FracHeat":row["Fraction Heat Added"]}
             return load_dict
                 
-        def _sum_schedules(schdict):
+        def _sum_schedules(schdict,name,building_area,tier,noncrit_tier,result_path):
             
             sch_sum = None
             heat_sch_sum = None
             for key,sch in schdict.items():
                 if sch_sum is None:
-                    sch_sum = sch["Peak"] * sch["Sch"]
+                    sch_sum = sch["Wh_per_day_per_m2"] * sch["Sch"] / sch["Sch"].sum()
                     heat_sch_sum = sch_sum * sch["FracHeat"]
                 else:
-                    Elec = sch["Peak"] * sch["Sch"]
+                    Elec = sch["Wh_per_day_per_m2"] * sch["Sch"] / sch["Sch"].sum() # should be normalized but this kind of schedule must sum to 1. and be of length = 24
                     sch_sum += Elec
                     heat_sch_sum += Elec * sch["FracHeat"] 
+            if tier == noncrit_tier:
+                fig,ax = plt.subplots(1,1,figsize=(10,10))
+                (pd.DataFrame(schdict).loc["Wh_per_day_per_m2"]/Unit_Convert.kW_to_Watts*building_area).plot.bar(ax=ax,title=name,grid=True,fontsize=12)
+                ax.set_ylabel("Static Electric Load Type (kWh/day)")
+                plt.tight_layout()
+                plt.savefig(os.path.join(result_path,"StaticElectricLoads_" + name + self.run_name + ".png"))
             return sch_sum, heat_sch_sum
                 
         
         # reduce the static loads to only the building and tier list of interest for 
         # the current run.
+        result_path = self.result_path
         static = dat["StaticElectricLoads"]
         rnames = repeat_names[building_name]
         tier_list = self.tier_map[tier]
@@ -681,10 +753,9 @@ class TieredAnalysis(object):
         bstat_org = DF_ops.column_multiselect(static[static["Building"]==building_name], "Tier", tier_list)
         for rname in rnames:
             bstat[rname] = DF_ops.column_multiselect(static[static["Building"]==rname], "Tier", tier_list)
-        if building_name == "GroceryStore":
-            u = 1
+
         org_load_dict = _load_dict(bstat_org, dat, building_area[building_name])
-        tot_sch, tot_heat_sch = _sum_schedules(org_load_dict)
+        tot_sch, tot_heat_sch = _sum_schedules(org_load_dict,building_name,building_area[building_name],tier,self.noncrit_tier,self.result_path)
         # rename sum to a meaningful name.
         if tot_sch is None:
             self.warning_messages.append("There are no static electricity loads for building " + building_name + " is this intentional??")
@@ -698,7 +769,7 @@ class TieredAnalysis(object):
         repeat_names_tot_heat_schs = {}
         for key,val in bstat.items():
             # build off of the base-building for the repeat name.
-            repeat_dict = org_load_dict.copy()
+            repeat_dict = deepcopy(org_load_dict)
 
             new_entries =  _load_dict(val,dat, building_area[key])
 
@@ -706,11 +777,15 @@ class TieredAnalysis(object):
             for unique_key, schdict in new_entries.items():
                 # this either replaces or adds to the existing dictionary of schedules
                 repeat_dict[unique_key] = schdict
-            repeat_names_tot_schs[key], repeat_names_tot_heat_schs[key] = _sum_schedules(repeat_dict)
+            repeat_names_tot_schs[key], repeat_names_tot_heat_schs[key] = _sum_schedules(repeat_dict,key,building_area[key],tier,self.noncrit_tier,self.result_path)
             # gives these correct names
             repeat_names_tot_schs[key].rename("Total Appliance Electric Loads",inplace=True)
             repeat_names_tot_heat_schs[key].rename("Total Appliance Heat Loads",inplace=True)
             
+        if tot_sch.isna().sum() > 0 or tot_heat_sch.isna().sum() > 0:
+            raise ValueError("The input spreadsheet must have an incorrect"+
+                             "value or blank value where it needs an entry."+
+                             "A NaN has been detected!")
             
         return tot_sch, tot_heat_sch, repeat_names_tot_schs, repeat_names_tot_heat_schs
             
@@ -789,7 +864,7 @@ class TieredAnalysis(object):
         if not_repeat_name:
             complex_appliances = {}  
         else:
-            complex_appliances = org_complex_appliances.copy()
+            complex_appliances = deepcopy(org_complex_appliances)
             
         df_tier_dict = {}
         for key,tdict in sheet_names.items():
@@ -932,6 +1007,7 @@ class TieredAnalysis(object):
                                                                        tier, 
                                                                        repeat_total_floor_area, 
                                                                        repeat_names)
+
         # complex appliances applied to each building.
         (org_complex_appliances,
          repeat_complex_appliances) = self._derive_complex_appliances(name,
@@ -951,9 +1027,7 @@ class TieredAnalysis(object):
             occupant_schedule = repeat_occupant_schedule[rname]
             complex_appliances = repeat_complex_appliances[rname]
             appliance_schedule = repeat_name_appliance_schs[rname]
-            appliance_heat_schedule = repeat_name_appliance_heat_schs[rname]
-        
-                
+            appliance_heat_schedule = repeat_name_appliance_heat_schs[rname]    
             buildings[rname] = RCBuilding(building_name = rname, 
                             floor_area = building_data["Floor Area (m2)"], #m2
                             floor_height = building_data["Floor Height (m)"],
@@ -997,9 +1071,7 @@ class TieredAnalysis(object):
 
 
 
-class Unit_Convert():
-    
-    hours_to_seconds = 3600.0
+
 
 class DF_ops():
     """
@@ -1751,7 +1823,7 @@ class RCBuilding(object):
         self.Results["IndoorSurfaceTemp"] = []
         self.Results["OutsideAirTemp"] = []
         self.Results["PlugInFans"] = []
-        self.Results["Appliances"] = []
+        self.Results["StaticElectricLoads"] = []
         self.Results["Refrigerators"] = []
         self.Results["Wall_ACs"] = []
         self.Results["Lights"] = []
@@ -1861,7 +1933,8 @@ class RCBuilding(object):
                                                                       P_out,
                                                                       internal_gains,
                                                                       transmitted_illuminance,
-                                                                      occupancy,1,T_out)
+                                                                      occupancy,1,T_out,self.Location.weather_data[
+                                         'dirnorillum_lux'][ts])
             
             if troubleshoot:
                 self._print_troubleshooting(fridge_Qnet, fridge_power, wall_ac_power, 
@@ -1988,7 +2061,7 @@ class RCBuilding(object):
         static_loads_power = self.total_area * self.appliance_schedule[ts_app]
         
         self.Results["PlugInFans"].append(fan_power)
-        self.Results["Appliances"].append(static_loads_power)
+        self.Results["StaticElectricLoads"].append(static_loads_power)
         self.Results["Refrigerators"].append(fridge_power)
         self.Results["Wall_ACs"].append(wall_ac_power)
         self.Results["Central_AC"].append(central_ac_power)
@@ -2025,7 +2098,7 @@ class RCBuilding(object):
         self.Results["BuildingArea"].append(self.total_area)
         
     def _complex_appliances(self,T_air_in,hour_of_day,hour_of_year, Pressure, static_heat_loads,
-                            transmitted_illuminance,occupancy,ts,T_out):
+                            transmitted_illuminance,occupancy,ts,T_out,normal_direct_illuminance):
         """
         
         Any appliances with more complicated thermal models with thermodynamic
@@ -2044,8 +2117,7 @@ class RCBuilding(object):
         """
         # TODO - all of this can be made more abstract and less cumbersome!
         cap = self.complex_appliances
-                
-        
+
         # first all appliances that add/subtract heat to the space need to be
         # analyzed before AC.
         
@@ -2078,7 +2150,7 @@ class RCBuilding(object):
         # lights - right now only the interior lights control the lighting threshold. 
         # Only one threshold is analyzed for now even though every lighting type
         # is given a threshold
-        light_demand = 0
+        total_light_demand = 0
         light_heat = 0
         if len(cap['lights']) != 0:
             for key, lighttup in cap['lights'].items():
@@ -2086,23 +2158,26 @@ class RCBuilding(object):
                 numlight = lighttup[0]
                 
                 if type(key) is str:
-                    light_demand += numlight * lights.power
+                    light_demand = numlight * lights.power
+                    self.building.lighting_load = light_demand / self.total_area 
+                    
+                    if lights.light_type == "Exterior":
+                        illuminance = normal_direct_illuminance
+                    else:
+                        illuminance = transmitted_illuminance
                     self.building.lighting_control = lights.lux_threshold
+                    self.building.solve_lighting(illuminance=illuminance, occupancy=occupancy)
+                    
+                    # now reassign the demand depending on whether the lights are actually on.
+                    total_light_demand += self.building.lighting_demand
                     if lights.light_type == "Interior":    
                         light_heat += lights.power * numlight * lights.fraction_heat                     
                     elif lights.light_type != "Exterior":
                         raise ValueError("An unknown light type was found: " +lights.light_type + ". Only " +
                                          str(["Interior","Exterior"]) + " are allowed!")
+                else:
+                    raise Exception("There is an error in the lighting complex appliance. The key is not a string!")
         
-        # this has to be normalized
-        self.building.lighting_load = light_demand / self.total_area 
-        self.building.solve_lighting(illuminance=transmitted_illuminance, occupancy=occupancy)
-        # now reassign the demand depending on whether the lights are actually on.
-        light_demand = self.building.lighting_demand
-        if light_demand == 0:
-            light_heat = 0
-            
-            
             
         wall_ac_power = 0
         wall_ac_sensible_heat = 0
@@ -2159,7 +2234,7 @@ class RCBuilding(object):
         return (fridge_Qnet, fridge_power, wall_ac_power, 
                 wall_ac_sensible_heat, wall_ac_mdot_condensed, 
                 fan_power, fan_heat, fan_ACH,
-                light_heat, light_demand, unmet_cooling_0,unmet_heating_0)
+                light_heat, total_light_demand, unmet_cooling_0,unmet_heating_0)
 
     
 class ReadInputSpreadSheet(object):
