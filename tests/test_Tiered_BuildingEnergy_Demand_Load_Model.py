@@ -37,11 +37,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 Created on Fri Oct  9 07:54:43 2020
 
 @author: dlvilla
-"""
+ec """
 if __name__ == "__main__":
-    import Tiered_BuildingEnergy_Demand_Load_Model as ec_be
-    from Complex_Appliances import Wall_AC_Unit
-    from Thermodynamics import thermodynamic_properties as tp
+    import TEB.simulator.sim as ec_be
+    from TEB.simulator.complex_appliances import Wall_AC_Unit
+    from TEB.simulator.thermodynamics import thermodynamic_properties as tp
     tp = tp()
 import numpy as np
 import unittest
@@ -49,9 +49,6 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import statsmodels.api as sm
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
-
-
 
 import os
 
@@ -375,7 +372,7 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
     
     
     def test_TieredAnalysis_template(self):
-        tiered_load_template_path = os.path.join("LoadData","TieredLoads_Template.xlsx")
+        tiered_load_template_path = os.path.join("ExcelLoadData","TieredLoads_Template.xlsx")
         obj = ec_be.TieredAnalysis(tiered_load_template_path,False,10,"Results")
         results = obj.df_results
         results.plot(subplots=True)
@@ -398,7 +395,7 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
         pass
     
     def test_Tiered_Analysis_appliance_schedule_and_appliance_counts(self):
-        ElCano_Tiered_load_path = os.path.join("LoadData", "TieredLoads_Testing2.xlsx")
+        ElCano_Tiered_load_path = os.path.join("ExcelLoadData", "TieredLoads_Testing2.xlsx")
         obj = ec_be.TieredAnalysis(ElCano_Tiered_load_path,False,24,"Results",True)
         
         building_noncrit = obj.buildings["Townhome2B_Elev"]['Non-critical']['Townhome2B_Elev_Home_Medical']

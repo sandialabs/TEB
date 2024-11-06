@@ -42,7 +42,7 @@ Created on Wed Nov 11 15:02:45 2020
 import os
 import numpy as np
 import pandas as pd
-from Thermodynamics import thermodynamic_properties as tp
+from TEB.simulator.thermodynamics import thermodynamic_properties as tp
 tp = tp()
 
 class Wall_AC_Unit(object):

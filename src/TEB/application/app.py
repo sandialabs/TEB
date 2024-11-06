@@ -1,8 +1,8 @@
 import dash
 from dash import dcc, html, Input, Output, State
 import plotly.express as px
-from .database import Database
-from .simulation import Simulation
+from TEB.database.sqli3 import Database
+from TEB.simulator.sim import TieredAnalysis
 
 class ElectricalLoadDashboard:
     """Main application class for the dashboard."""
@@ -10,7 +10,7 @@ class ElectricalLoadDashboard:
     def __init__(self):
         self.app = dash.Dash(__name__)
         self.db = Database()
-        self.simulation = Simulation(self.db)
+        self.simulation = TieredAnalysis(self.db)
         self.app.layout = self.create_layout()
         self.register_callbacks()
 
@@ -22,7 +22,7 @@ class ElectricalLoadDashboard:
             dcc.Input(id='usage-hours', type='number', placeholder='Usage Hours/Day'),
             dcc.Input(id='frequency', type='number', placeholder='Frequency/Week'),
             html.Button('Submit', id='submit-button'),
-            html.Button('Run Simulation', id='run-simulation'),
+            html.Button('Run TieredAnalysis', id='run-simulation'),
             dcc.Loading(id="loading", children=[html.Div(id='output')]),
             dcc.Graph(id='usage-graph'),
             dcc.Progress(id='progress-bar', value=0, max=100)
