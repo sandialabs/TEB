@@ -440,7 +440,7 @@ class TieredAnalysis(object):
             df_sub = df_final[df_final["Tier"]==tier]
             df_sub.index = df_sub["Date"]
             
-            df_monthly = df_sub.resample("m").sum()[ElectricityUse]
+            df_monthly = df_sub.resample("ME").sum()[ElectricityUse]
             
             
             self._monthly_bar_plot(df_monthly.T,
@@ -703,9 +703,9 @@ class TieredAnalysis(object):
                 app_sch = self._find_schedule(dat, row["Schedule"])
                 if not app_sch is None:
                     if row["Per Area (W = False or W/m2 = True?)"]:
-                        app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Power (W or W/m2)"] # already in W/m2
+                        app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Energy (kWh/day or kWh/day/m2)"] # already in W/m2
                     else: # is on a W basis and needs to be on a W/m2 basis!
-                        app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Power (W or W/m2)"] / building_area
+                        app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Energy (kWh/day or kWh/day/m2)"] / building_area
                 # verify that the tier and load name are unique
                 unique_key = row["Load Name"] + "_" + row["Tier"]
                 if unique_key in load_dict.keys():
@@ -1760,7 +1760,7 @@ class RCBuilding(object):
         
         self.Location.weather_data["actual date"] = new_index[0:len(wd)]
         
-        self.building.t_air = self.Location.weather_data['drybulb_C'][0]
+        self.building.t_air = self.Location.weather_data['drybulb_C'].iloc[0]
         self.building.energy_demand_unrestricted = 0.0 # using the RC building simulator to calculate 
                                                        # cooling and heating loads.
         self.latitude = building_latitude
@@ -1778,9 +1778,9 @@ class RCBuilding(object):
         self.heat_gain_per_person = heat_gain_per_person
         
         # temperature initial condition
-        self.T_prev = self.Location.weather_data['drybulb_C'][0]
+        self.T_prev = self.Location.weather_data['drybulb_C'].iloc[0]
         # assume the room is initially as humid as the outside
-        self.internal_rh = self.Location.weather_data['relhum_percent'][0]/100
+        self.internal_rh = self.Location.weather_data['relhum_percent'].iloc[0]/100
         
         self._initialize_results()
             
@@ -1798,7 +1798,7 @@ class RCBuilding(object):
         
     def _calculate_monthly_ground_temperatures(self,elevation,wd):
         # see Lugo-Camacho et. al., 2009 "Soil temperature studyin Puerto Rico"
-        avg_air_temperatures = wd.resample("m").mean()
+        avg_air_temperatures = wd.resample("ME").mean()
         self.ground_temperature = avg_air_temperatures - self.ground_temp_elev_sens * elevation
         self.month_at_hour = wd.index.month
 
@@ -1848,13 +1848,13 @@ class RCBuilding(object):
         # reset the time marker from previous runs
         self.master_building_name = master_building_name
         self.current_hour = start_hour
-        self.T_prev = self.Location.weather_data['drybulb_C'][start_hour]
+        self.T_prev = self.Location.weather_data['drybulb_C'].iloc[start_hour]
         self._preliminary_model_checks()
         for hr in np.arange(start_hour,stop_hour):
             self._time_step(troubleshoot)       
         
     #def _human_comfort_index():
-    #    Tc = self.Location.weather_data['drybulb_C'][ts]
+    #    Tc = self.Location.weather_data['drybulb_C'].iloc[ts]
     #    # see [2] TODO - replace this with ASHRAE 55 thermal comfort envelope.
     #    return 1.8 * Tc - 0.55 * (1.8 * Tc - 26.0) * (1 - RH) + 9.2 *(9+10.9*np.sqrt(vw) - vw) + 32.0
       
@@ -1884,8 +1884,8 @@ class RCBuilding(object):
     
         # Extract the outdoor temperature in for that hour
 
-        T_out = self.Location.weather_data['drybulb_C'][ts]
-        P_out = self.Location.weather_data['atmos_Pa'][ts]
+        T_out = self.Location.weather_data['drybulb_C'].iloc[ts]
+        P_out = self.Location.weather_data['atmos_Pa'].iloc[ts]
 
         T_prev = self.T_prev
     
@@ -1903,12 +1903,12 @@ class RCBuilding(object):
         transmitted_illuminance = 0.0
         for key,window in self.windows.items():
             window.calc_solar_gains(sun_altitude=Altitude, sun_azimuth=Azimuth,
-                                     normal_direct_radiation=self.Location.weather_data['dirnorrad_Whm2'][ts],
-                                     horizontal_diffuse_radiation=self.Location.weather_data['difhorrad_Whm2'][ts])
+                                     normal_direct_radiation=self.Location.weather_data['dirnorrad_Whm2'].iloc[ts],
+                                     horizontal_diffuse_radiation=self.Location.weather_data['difhorrad_Whm2'].iloc[ts])
             window.calc_illuminance(sun_altitude=Altitude, sun_azimuth=Azimuth,
                                      normal_direct_illuminance=self.Location.weather_data[
-                                         'dirnorillum_lux'][ts],
-                                     horizontal_diffuse_illuminance=self.Location.weather_data['difhorillum_lux'][ts])
+                                         'dirnorillum_lux'].iloc[ts],
+                                     horizontal_diffuse_illuminance=self.Location.weather_data['difhorillum_lux'].iloc[ts])
             solar_gains += window.solar_gains
             transmitted_illuminance += window.transmitted_illuminance
         
@@ -1932,7 +1932,7 @@ class RCBuilding(object):
                                                                       internal_gains,
                                                                       transmitted_illuminance,
                                                                       occupancy,1,T_out,self.Location.weather_data[
-                                         'dirnorillum_lux'][ts])
+                                         'dirnorillum_lux'].iloc[ts])
             
             if troubleshoot:
                 self._print_troubleshooting(fridge_Qnet, fridge_power, wall_ac_power, 
@@ -1941,7 +1941,7 @@ class RCBuilding(object):
                                             light_heat, light_power)
     
             #TODO add latent heat rate for human's inside the house which adds moisture        
-            external_rh = self.Location.weather_data['relhum_percent'][ts]/100
+            external_rh = self.Location.weather_data['relhum_percent'].iloc[ts]/100
             internal_rh_new = self.humidity_model._humidity_model(wall_ac_mdot_condensed, 
                                              self.ach_infiltration,
                                              P_out,
@@ -2212,7 +2212,7 @@ class RCBuilding(object):
                         TC, SC, mdot_condensed, power, unmet_cooling_1 = ACunit.avg_thermal_loads(
                             DBT_internal=T_air_in,
                             rh_internal=self.internal_rh,
-                            DBT_external=self.Location.weather_data['drybulb_C'][ts],
+                            DBT_external=self.Location.weather_data['drybulb_C'].iloc[ts],
                             Pressure = Pressure,
                             num_AC = num_AC,
                             volume = self.building.room_vol,

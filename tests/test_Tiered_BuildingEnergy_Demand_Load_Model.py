@@ -372,7 +372,7 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
     
     
     def test_TieredAnalysis_template(self):
-        tiered_load_template_path = os.path.join("ExcelLoadData","TieredLoads_Template.xlsx")
+        tiered_load_template_path = os.path.join(os.path.dirname(__file__),"ExcelLoadData","TieredLoads_Template.xlsx")
         obj = ec_be.TieredAnalysis(tiered_load_template_path,False,10,"Results")
         results = obj.df_results
         results.plot(subplots=True)
@@ -395,7 +395,13 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
         pass
     
     def test_Tiered_Analysis_appliance_schedule_and_appliance_counts(self):
-        ElCano_Tiered_load_path = os.path.join("ExcelLoadData", "TieredLoads_Testing2.xlsx")
+        
+        _kW_to_W = 1000
+        
+        def _normalize_schedule(sch,mult):
+            return mult * sch * _kW_to_W / sch.sum()
+        
+        ElCano_Tiered_load_path = os.path.join(os.path.dirname(__file__),"ExcelLoadData", "TieredLoads_Testing2.xlsx")
         obj = ec_be.TieredAnalysis(ElCano_Tiered_load_path,False,24,"Results",True)
         
         building_noncrit = obj.buildings["Townhome2B_Elev"]['Non-critical']['Townhome2B_Elev_Home_Medical']
@@ -410,17 +416,40 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
         barea = building_tier3.total_area
         # manual calculation: First the schedules that apply to 'Townhome2B_Elev_Home_Medical' then to "Townhome2B_Elev"
         
-        range_noncrit = 2000 * np.array([0,0,0,0,0,0,0.5,0.2,0,0,0.1,0.4,0.2,0,0,0,0.5,0.8,0.2,0,0,0,0,0])
-        homemed_tier2 = 207 * np.array([0.3,0.3,0.34,0.34,0.34,0.35,0.35,0.4,0.5,0.6,0.7,0.7,0.95,1,1,1,1,0.9,0.7,0.6,0.5,0.4,0.3,0.3])
-        phone_tier1 = 10 * np.array([0.1,0.1,1,1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,1,1,0.1,0.1])
-        laptop_tier2 = 60 * np.array([0.1,0.1,0.1,0.1,0.1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0.1,1,1,0.1,0.1])
-        laptop_tier3 = 60 * np.array([0.1,0.1,0.1,0.1,0.1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0.1,1,1,0.1,0.1])
-        hotwater_tier2 = 4000 * np.array([0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0])
-        smoke_tier1 = 2 * np.array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1])
-        wash_noncrit = 500 * np.array([0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0])
-        dryer_noncrit = 3000 * np.array([0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0])
-        microwave_tier1 = 1000 * np.array([0,0,0,0.025,0.05,0.1,0.15,0.1,0.05,0.06,0.15,0.2,0.15,0.05,0.025,0.03,0.05,0.15,0.1,0.05,0.05,0.025,0.01,0.01])
-        tv_tier3 = 200 * np.array([0.05,0.05,0.05,0.1,0.2,0.6,0.85,0.6,0.2,0.2,0.3,0.5,0.5,0.5,0.6,0.7,0.8,0.9,1,0.9,0.8,0.7,0.6,0.2])
+
+        range_noncrit = _normalize_schedule(
+            np.array([0,0,0,0,0,0,0.5,0.2,0,0,0.1,0.4,0.2,0,0,0,0.5,0.8,0.2,0,0,0,0,0]),
+            2000)
+        homemed_tier2  = _normalize_schedule(
+            np.array([0.3,0.3,0.34,0.34,0.34,0.35,0.35,0.4,0.5,0.6,0.7,0.7,0.95,1,1,1,1,0.9,0.7,0.6,0.5,0.4,0.3,0.3]),
+            207)
+        phone_tier1 = _normalize_schedule(
+            np.array([0.1,0.1,1,1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,0.1,1,1,0.1,0.1]),
+            10)
+        laptop_tier2 = _normalize_schedule(
+            np.array([0.1,0.1,0.1,0.1,0.1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0.1,1,1,0.1,0.1]),
+            60)
+        laptop_tier3 = _normalize_schedule(
+            np.array([0.1,0.1,0.1,0.1,0.1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0.1,1,1,0.1,0.1]),
+            60)
+        hotwater_tier2 = _normalize_schedule(
+            np.array([0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0]),
+            4000)
+        smoke_tier1 = _normalize_schedule(
+            np.array([1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]),
+            2)
+        wash_noncrit = _normalize_schedule(
+            np.array([0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0]),
+            500)
+        dryer_noncrit = _normalize_schedule(
+            np.array([0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0]),
+            3000)
+        microwave_tier1 = _normalize_schedule(
+            np.array([0,0,0,0.025,0.05,0.1,0.15,0.1,0.05,0.06,0.15,0.2,0.15,0.05,0.025,0.03,0.05,0.15,0.1,0.05,0.05,0.025,0.01,0.01]),
+            1000)
+        tv_tier3 = _normalize_schedule(
+            np.array([0.05,0.05,0.05,0.1,0.2,0.6,0.85,0.6,0.2,0.2,0.3,0.5,0.5,0.5,0.6,0.7,0.8,0.9,1,0.9,0.8,0.7,0.6,0.2]),
+            200)
         
         app_sch_manual_noncrit = pd.Series(range_noncrit + homemed_tier2 + phone_tier1 + laptop_tier2 +
                                   laptop_tier3 + hotwater_tier2 + smoke_tier1 + wash_noncrit + 

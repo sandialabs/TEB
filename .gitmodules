@@ -1,0 +1,3 @@
+[submodule "subs/RC_BuildingSimulator"]
+	path = subs/RC_BuildingSimulator
+	url = https://github.com/architecture-building-systems/RC_BuildingSimulator.git
