@@ -107,6 +107,7 @@ from rcbsim import supply_system
 from rcbsim import emission_system
 from TEB.simulator.complex_appliances import Refrigerator, Wall_AC_Unit, Fan, Light
 from TEB.simulator.thermodynamics import thermodynamic_properties
+from TEB.simulator.lpg import LPG_data
 from copy import deepcopy
 from matplotlib import pyplot as plt
 from numbers import Number
@@ -149,7 +150,7 @@ class TieredAnalysis(object):
     
     def __init__(self,tiered_load_spreadsheet_path,troubleshoot=False,
                  stop_time=8760,results_path="Results",run_parallel=False,
-                 run_name=""):
+                 run_name="", lpg_path=""):
         
         """
         TODO - connect the Tiered Analysis to a database structure rather than
@@ -187,7 +188,24 @@ class TieredAnalysis(object):
             input spreadsheet name but you can overwrite that here if desired.
             This run name gets added to titles of plots and csv file names
             
-        
+        lpg_path : dict or str : Optional, Default = ""
+            Either a dictionary whose keys are the building names of all 
+            buildings (in the "tiered_load_spreadsheet_path" Path spreadsheet)
+            "Buildings" sheet columns + any "New Name" entries in the 
+            "RepeatBuildingConfigs". Every name from both of these lists must 
+            have a valid input in the dictionary with different folder paths 
+            to different LPG analyses (or the same analysis if appropriate)
+            LoadProfileGenerator (https://www.loadprofilegenerator.de/)
+            output csv file. If present, the static loads portion of TEB 
+            comes from an 8760 output based on a loadprofilegenerator model
+            instead of a static 24 hr cycle (a big enhancement)
+            
+            If only a string is given, then all buildings are given the same
+            load profile generator analysis results.
+            
+            WARNING - you must assure that the weather file for the 
+            LoadProfileGenerator analysis and the TEB analysis match each
+            other.
         
         """
         
@@ -224,8 +242,34 @@ class TieredAnalysis(object):
         building_objects = {}
         
         run_list = {}
+        lpg_data_dict = {}
+        #
+        lpg_path_dict = self._prepare_and_check_lpg_paths(lpg_path,dat,repeat_names)
+        
         # loop over buildings to create the needed data structure
         for building_name, building_data in dat.buildings.items():
+            
+            all_cases = np.append(repeat_names[building_name],building_name)
+            THIS IS WHERE I LEFT OFF!
+            
+            
+            # LPG data read in - 1 min time step which makes it challenging!
+            if len(lpg_path_dict) > 0:
+                # Establish the new lpg_data by reading a processing another file
+                lpg_loc_path = lpg_path_dict[building_name]
+                if lpg_loc_path in lpg_data_dict:
+                    lpg_data = lpg_data_dict[lpg_loc_path]
+                else:
+                    # a new file has to be read.
+                    lpg_data_obj = LPG_data(lpg_loc_path, building_data)
+                    lpg_data = lpg_data_obj.output
+            else:
+                lpg_data = None
+                
+            
+            
+            breakpoint()    
+            
             #loop over tiers
             tier_results = {}
             building_objects[building_name] = {}
@@ -244,7 +288,8 @@ class TieredAnalysis(object):
                                                           building_data,
                                                           dat,
                                                           tier,
-                                                          repeat_names)
+                                                          repeat_names,
+                                                          lpg_data)
                 sub_building_results = {}
                 for bname,building in buildings.items():
                     #TODO - generalize run time window for the buildings
@@ -298,6 +343,55 @@ class TieredAnalysis(object):
         
         # build all of the results into a single dataframe
         return
+    
+    def _prepare_and_check_lpg_paths(self, lpg_path, dat, repeat_names):
+        
+        """
+        Assure that the dictionary structure matches the exact set of
+        buildings OR make the same LPG analysis apply to all buildings
+        
+        """
+        def _check_path_exists(path):
+            if not os.path.exists(path):
+                raise FileNotFoundError(f"The lpg_path input path {path}"
+                    +" does not exist!")
+                
+                
+        def _verify_name_present(building_name,lpg_path):
+            if building_name not in lpg_path:
+                raise ValueError("If an LPG analysis is being defined, "
+                    +f"every building must have a path! {building_name}"
+                    +f"is not included in the input lpg_path={lpg_path}")
+            else:
+                _check_path_exists(lpg_path[building_name])
+            
+            
+        
+        if isinstance(lpg_path,dict):
+            for building_name, building_data in dat.buildings.items():
+                _verify_name_present(building_name, lpg_path)
+                
+                for rbname in repeat_names[building_name]:
+                    _verify_name_present(rbname, lpg_path)
+
+            lpg_path_dict = lpg_path
+        elif isinstance(lpg_path,str):
+            # apply the same LPG analysis results to ALL buildings.
+            if len(lpg_path) > 0:
+                
+                _check_path_exists(lpg_path)
+                
+                lpg_path_dict = {}
+                for building_name, building_data in dat.buildings.items():
+                    lpg_path_dict[building_name] = lpg_path
+                    
+                    for rbname in repeat_names[building_name]:
+                        lpg_path_dict[rbname] = lpg_path
+            
+            else:
+                lpg_path_dict = {}
+                
+        return lpg_path_dict
     
     def post_process(self,building_mixture_law_dict,combined_name,plot_results=False,title="",
                      save_file_name=None):
@@ -1018,7 +1112,8 @@ class TieredAnalysis(object):
         
             
     
-    def _create_RC_building_model(self,name,building_data,dat,tier,repeat_names):
+    def _create_RC_building_model(self,name,building_data,dat,tier,
+                                  repeat_names,lpg_data):
         
         # Change the building based on the "BuildingTiers" sheet which allows 
         # redefinition of values in the "Buildings" sheet based on tiers.
@@ -1042,15 +1137,16 @@ class TieredAnalysis(object):
         # it is used by _derive_static_loads_schedule
         repeat_total_floor_area[name] = org_total_floor_area    
 
-        # static electric loads        
+        # static electric loads - only used if lpg_data is None.
         (org_appliance_schedule,
          org_appliance_heat_schedule,
          repeat_name_appliance_schs,
-         repeat_name_appliance_heat_schs) = self._derive_static_loads_schedule(dat.inputs,
-                                                                       name, 
-                                                                       tier, 
-                                                                       repeat_total_floor_area, 
-                                                                       repeat_names)
+         repeat_name_appliance_heat_schs) = self._derive_static_loads_schedule(
+             dat.inputs,
+             name, 
+             tier, 
+             repeat_total_floor_area, 
+             repeat_names)
 
         # complex appliances applied to each building.
         (org_complex_appliances,
@@ -1110,7 +1206,8 @@ class TieredAnalysis(object):
                             ground_temp_elev_sens= building_data["Ground temperature to elevation sensitivity (K/m)"],
                             tier=tier,
                             use_central_ac=building_data["Include Central A/C"],
-                            central_ac_avg_cop=building_data["Central A/C average COP (only used if Include Central A/C = True)"])
+                            central_ac_avg_cop=building_data["Central A/C average COP (only used if Include Central A/C = True)"],
+                            lpg_data=lpg_data)
         return buildings
 
 
