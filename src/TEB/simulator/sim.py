@@ -149,6 +149,13 @@ class TieredAnalysis(object):
     
     def __init__(self,tiered_load_spreadsheet_path,troubleshoot=False,
                  stop_time=8760,results_path="Results",run_parallel=False,run_name=""):
+        
+        """
+        
+        
+        
+        """
+        
         self.run_name = run_name
         self.result_path = results_path
         if run_parallel:
