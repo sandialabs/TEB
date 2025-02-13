@@ -148,15 +148,50 @@ class TieredAnalysis(object):
     months = np.array(["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"])
     
     def __init__(self,tiered_load_spreadsheet_path,troubleshoot=False,
-                 stop_time=8760,results_path="Results",run_parallel=False,run_name=""):
+                 stop_time=8760,results_path="Results",run_parallel=False,
+                 run_name=""):
+        
+        """
+        TODO - connect the Tiered Analysis to a database structure rather than
+               an excel spreadsheet
+               
+        TODO - Create data validation via pydantic
+        
+        Inputs
+        ======
+        
+        tiered_load_spreadhseet_path : str : must be a valid path to 
+            an excel spreadsheet that has the exact form needed by TEB. Examples
+            are in ./tests/ExcelLoadData
+            
+        troubleshoot : bool : Optional, Default = False
+            if True, a large amount of troubleshooting information is printed
+            (this needs to be replaced with logging)
+            
+        stop_time : int : Optional, Default = 8760,
+             Enables setting the stop time to a number smaller than 8760 for 
+             a shorter simulation that is not a full year of simulation.
+             
+        results_path : str : Optional, Default = "Results"
+            Must be an existing folder with a relative or absolute path.
+            All TEB results will be output to this location.
+            
+        run_parallel : bool : Optional, Default = False
+            if True will run different buildings on different threads. Using 
+            the multiprocessing library. When you do this, troubleshooting 
+            is not easy but the runs for large communities with multiple 
+            buildings are faster.
+            
+        run_name : str : Optional, Default = ""
+            Give a name to the Tiered Analysis. This usually comes from the 
+            input spreadsheet name but you can overwrite that here if desired.
+            This run name gets added to titles of plots and csv file names
+            
+        
         
         """
         
         
-        
-        """
-        
-        self.run_name = run_name
         self.result_path = results_path
         if run_parallel:
             import multiprocessing as mp
@@ -169,7 +204,11 @@ class TieredAnalysis(object):
                 if "Unnamed: " in col:
                     val.drop([col],axis=1,inplace=True)
         
-        run_name = os.path.basename(tiered_load_spreadsheet_path).split(".")[0]
+        if len(run_name) == 0: 
+            run_name = os.path.basename(tiered_load_spreadsheet_path).split(".")[0]
+            
+        self.run_name = run_name
+        
         # reassure the input is correct (spreadsheets! Ugghh)
         # TODO get this working
         #TieredDataFormat(tier_loads)
