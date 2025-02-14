@@ -243,32 +243,31 @@ class TieredAnalysis(object):
         
         run_list = {}
         lpg_data_dict = {}
+        lpg_data = {}
         #
         lpg_path_dict = self._prepare_and_check_lpg_paths(lpg_path,dat,repeat_names)
         
         # loop over buildings to create the needed data structure
         for building_name, building_data in dat.buildings.items():
-            
-            all_cases = np.append(repeat_names[building_name],building_name)
-            THIS IS WHERE I LEFT OFF!
-            
-            
+
             # LPG data read in - 1 min time step which makes it challenging!
             if len(lpg_path_dict) > 0:
-                # Establish the new lpg_data by reading a processing another file
-                lpg_loc_path = lpg_path_dict[building_name]
-                if lpg_loc_path in lpg_data_dict:
-                    lpg_data = lpg_data_dict[lpg_loc_path]
-                else:
-                    # a new file has to be read.
-                    lpg_data_obj = LPG_data(lpg_loc_path, building_data)
-                    lpg_data = lpg_data_obj.output
-            else:
-                lpg_data = None
+                # add repeat names (i.e., same building but with different occupant
+                # or equipment configurations)
+                all_cases = np.append(repeat_names[building_name],building_name)
                 
-            
-            
-            breakpoint()    
+                for case_ in all_cases:
+                
+                    # Establish the new lpg_data by reading a processing another file
+                    lpg_loc_path = lpg_path_dict[case_]
+                    if lpg_loc_path in lpg_data_dict:
+                        lpg_data[case_] = lpg_data_dict[lpg_loc_path]
+                    else:
+                        # a new file has to be read. (takes some time!)
+                        lpg_data_obj = LPG_data(lpg_loc_path)
+                        lpg_data[case_] = lpg_data_obj.output
+            else:
+                lpg_data = None   
             
             #loop over tiers
             tier_results = {}
@@ -842,7 +841,7 @@ class TieredAnalysis(object):
             for bname, row in bstat.iterrows():
                 app_sch = self._find_schedule(dat, row["Schedule"])
                 if not app_sch is None:
-                    if row["Per Area (W = False or W/m2 = True?)"]:
+                    if row["Per Area (kWh = False or kWh/m2 = True?)"]:
                         app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Energy (kWh/day or kWh/day/m2)"] # already in W/m2
                     else: # is on a W basis and needs to be on a W/m2 basis!
                         app_peak = row["Multiplier"] * Unit_Convert.kW_to_Watts * row["Energy (kWh/day or kWh/day/m2)"] / building_area
@@ -887,7 +886,6 @@ class TieredAnalysis(object):
         rnames = repeat_names[building_name]
         tier_list = self.tier_map[tier]
         bstat = {}
-        
         bstat_org = DF_ops.column_multiselect(static[static["Building"]==building_name], "Tier", tier_list)
         for rname in rnames:
             bstat[rname] = DF_ops.column_multiselect(static[static["Building"]==rname], "Tier", tier_list)
@@ -1207,7 +1205,7 @@ class TieredAnalysis(object):
                             tier=tier,
                             use_central_ac=building_data["Include Central A/C"],
                             central_ac_avg_cop=building_data["Central A/C average COP (only used if Include Central A/C = True)"],
-                            lpg_data=lpg_data)
+                            lpg_data=lpg_data[rname])
         return buildings
 
 
@@ -1571,16 +1569,16 @@ class concrete_wall(object):
 
 class RCBuilding(object):
     """ 
-    This class models as simple conceptual apartment unit of known floor area
-    and number of floors. 
+    This class models a single zone model that is specialized to Puerto Rican
+    cinder-block construction. It uses the RC Building Simulator
     
     Units = SI
+
     
-    THESE ARE OUT OF ORDER NOW! TODO FIX THE INPUT!
+    Input
+    =====
     
-    initialization variables
-    
-    building_name               : str - a name that is associated with the demand
+    building_name           : str - a name that is associated with the demand
                                     profile
     
     floor_area              : float > 0 building footprint area in m2
@@ -1632,12 +1630,6 @@ class RCBuilding(object):
                                 in CMS units
     windows_U_factor : float > 0.0 : U-factor for windows in W/(m2*K)
     
-    lighting_load_Wpm2 : float > 0.0 : Amount of lighting energy use per m2
-                                       consumed when lights are on. (W/m2)
-    
-    fan_air_changes_per_hour : float >= 0.0 : Air changes per hour produced
-                                              by plug load fans
-    
     infiltration_air_changes_per_hour : float >= 0 : leakiness of the building
                                                      to external air when sealed
                                                      (ach)
@@ -1656,15 +1648,13 @@ class RCBuilding(object):
                         will be repeated weekly etc... Each entry is a time 
                         step number
                         
-    appliance_schedule : np.array 1-D : same as occupant schedule but scaling
-                       "heat_gain_appliances_Wpm2"
-                      
-    glass_solar_transmittance : (optional) 1.0 > float > 0.0 : Fraction of solar 
-                                radiation that enters the building unimpeded
-                                
-    glass_light_transmittance : (optional) 1.0 > float > 0.0 : Fraction of 
-                                internal room light that escapes from the 
-                                room when it is incident on a window.
+    building_latitude : float
+    
+    building_longitude : float
+    
+    simulation_year : int
+    
+    start_hour_of_year : int
     
     additional_heat_capacity_besides_walls : (optional) float > 0.0 [J/m2]
                                 added heat capacity from insulation, flooring
@@ -1675,19 +1665,19 @@ class RCBuilding(object):
                             addition to the CMS walls R factor (calculated)
                             internally based on concrete density and thickness
                             and air void fraction.
-                            
-    lighting_control_lux_threshold : (optional) default = 300. Numbers of Lux 
-                            (lumen/m2) below which lights are turned on in the
-                            units.
+                      
+    glass_solar_transmittance : (optional) 1.0 > float > 0.0 : Fraction of solar 
+                                radiation that enters the building unimpeded
                                 
-    heat_gain_per_person : (optional) default = 110.0 W/person (moderate activity)
+    glass_light_transmittance : (optional) 1.0 > float > 0.0 : Fraction of 
+                                internal room light that escapes from the 
+                                room when it is incident on a window.
     
-    heat_gain_appliances : (optional) default = 10 W/m2 heat gain from appliances
-                            in the building. (not including fan loads)
                                 
     heat_gain_per_person : float > 0 : sum of sensible and latent heat per person:
-                           moderate activeity is 110.0 W/person https://www.engineeringtoolbox.com/metabolic-heat-persons-d_706.html
-    
+                           moderate activeity is 110.0 W/person 
+                           https://www.engineeringtoolbox.com/metabolic-heat-persons-d_706.html
+                                                  
     complex_appliances : dict :
         Dictionary with entries "fridges", "fans", "ac", "lights". Other complex
         appliances may be added in the future. Each dictionary key provides
@@ -1708,8 +1698,8 @@ class RCBuilding(object):
         building.
         
     elevation : float > 0:
-        Elevation in meters above sea level of the building
-        
+        Elevation in meters above sea level of the building 
+    
     ground_temp_elev_sens : float :
         Sensitivity of ground temperature to elevation ground temperature reduces
         as elevation increases
@@ -1726,6 +1716,13 @@ class RCBuilding(object):
         performance curves for the efficiency of the central ac. Values of 2-3 
         are typical with 3-5 indicative of highly efficient systems such as
         a ground source heat pump.
+        
+    lpg_data : dict (optional) Default = None
+        Load Profile Generator (LPG) data that replaces the appliance_schedule
+        and appliance_heat_schedule inputs with an 8760 energy use schedule 
+        that comes from the LPG software tool: https://www.loadprofilegenerator.de/
+        The dictionary has entries: 'electricity' and 'internal_heat' defined
+        in the lpg.py LPG_data class.
         
     
     The basic parameters of this analysis can be changed mid-step to simulate
@@ -1779,7 +1776,8 @@ class RCBuilding(object):
                        ground_temp_elev_sens,
                        tier,
                        use_central_ac,
-                       central_ac_avg_cop):
+                       central_ac_avg_cop,
+                       lpg_data=None):
         
         self.name = building_name
         # interpret these inputs into the inputs to the 5RC1 model.
@@ -1862,11 +1860,12 @@ class RCBuilding(object):
         
         self.windows = windows
         self.ach_infiltration = infiltration_air_changes_per_hour
+        breakpoint()
         self.building = Zone(window_area=total_window_area,
               walls_area=total_wall_area,
-              floor_area=self.total_area,
+              floor_area=floor_area #self.total_area, The two floor model will have greater volume and total internal area
               room_vol=total_volume,
-              total_internal_area=total_wall_area * fraction_internal_walls,
+              total_internal_area=total_wall_area * fraction_internal_walls + 2 * floor_area,
               lighting_load=1.0,  # This changes based on the lights class
               lighting_control=300.0, # this changes based on the Lights class
               lighting_utilisation_factor=0.45, # TODO add to lights class
@@ -1912,9 +1911,21 @@ class RCBuilding(object):
         self.max_occupants = person_per_floor * num_floors
         self.occupant_schedule = occupant_schedule     # 
         self.len_occupant_sch = len(occupant_schedule)
-        self.appliance_schedule = appliance_schedule   # 
-        self.len_appliance_sch = len(appliance_schedule)
-        self.appliance_heat_schedule = appliance_heat_schedule
+        
+        breakpoint()
+        if lpg_data is None:
+            # old 24 hr constant schedule model
+            self.appliance_schedule = appliance_schedule   # 
+            self.len_appliance_sch = len(appliance_schedule)
+            self.appliance_heat_schedule = appliance_heat_schedule
+        else:
+            # new 8760 agent-based household model for appliance energy consumption
+            # Also convert kWh to Wh and normalize by building area because 
+            # all other results are normalized by area.
+            self.appliance_schedule = appliance_schedule   # 
+            self.len_appliance_sch = len(appliance_schedule)
+            self.appliance_heat_schedule = appliance_heat_schedule
+            
         # TODO find a model of sensible and latent heat gain as a function of 
         #      environment. We add 0 sensible heat past 97F and transition to
         #      only latent heat.

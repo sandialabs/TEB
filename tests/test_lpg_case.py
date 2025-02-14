@@ -110,6 +110,8 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
             
             # create the Tiered Analysis object
             obj = ec_be.TieredAnalysis(self.tiered_load_test2_path,False,10,self.results_path,lpg_path=self.lpg_path_dict)
+            
+        expected_static_sch = {"Townhome2B_Elev":146.8233279,"units":"Wh/m2/day"}
         
     def test_bad_dict(self):
         if self.run_all:

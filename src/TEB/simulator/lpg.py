@@ -16,7 +16,7 @@ class LPG_data(object):
     lpg_files = {"electricity":"SumProfiles.Electricity.csv",
                  "internal_heat":"SumProfiles.Inner Device Heat Gains.csv"}
     
-    def __init__(self, data_path, building_data):
+    def __init__(self, data_path):
         output = {}
         
         for output_name, file_name in self.lpg_files.items():
