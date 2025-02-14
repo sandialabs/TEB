@@ -83,7 +83,7 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
             tiered_load_template_path = os.path.join(os.path.dirname(__file__),"ExcelLoadData","TieredLoads_Template.xlsx")
             
             # create the Tiered Analysis object
-            obj = ec_be.TieredAnalysis(tiered_load_template_path,False,10,self.results_path,lpg_path=self.data_path)
+            obj = ec_be.TieredAnalysis(tiered_load_template_path,False,3,self.results_path,lpg_path=self.data_path)
 
     def test_2_LPG_template(self):
         
@@ -94,7 +94,7 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
         
         """
         
-        if True: #self.run_all:
+        if self.run_all:
             # Setup the results directory
             if os.path.exists(self.results_path):
                 shutil.rmtree(self.results_path)
@@ -107,11 +107,43 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
             # (i.e., the same building but with a different equipment configuration.) on the "RepeatBuildingConfigs"
             # sheet.
 
-            
             # create the Tiered Analysis object
-            obj = ec_be.TieredAnalysis(self.tiered_load_test2_path,False,10,self.results_path,lpg_path=self.lpg_path_dict)
+            obj = ec_be.TieredAnalysis(self.tiered_load_test2_path,
+                                       False,
+                                       3,
+                                       self.results_path,
+                                       lpg_path=self.lpg_path_dict)
             
-        expected_static_sch = {"Townhome2B_Elev":146.8233279,"units":"Wh/m2/day"}
+            spot_check = obj.df_results.iloc[100,:]
+            self.assertAlmostEqual(spot_check["IndoorAirTemp"], 25.025658, 5)
+            self.assertAlmostEqual(spot_check["SolarGains"],0.0, 5)
+            self.assertAlmostEqual(spot_check["StructureTemp"],24.546807, 5)
+            self.assertAlmostEqual(spot_check["IndoorSurfaceTemp"],24.678683, 5)
+            self.assertAlmostEqual(spot_check["OutsideAirTemp"],23.9, 2)
+            self.assertAlmostEqual(spot_check["PlugInFans"],0.0, 2)
+            self.assertAlmostEqual(spot_check["StaticElectricLoads"],117.612585, 5)
+            self.assertAlmostEqual(spot_check["Refrigerators"],20.376264, 5)
+            self.assertAlmostEqual(spot_check["Wall_ACs"],0.0, 2)
+            self.assertAlmostEqual(spot_check["Lights"],165.0, 2)
+            self.assertAlmostEqual(spot_check["TotalElectricity"],302.988849, 5)
+            self.assertAlmostEqual(spot_check["IndoorAirRelativeHumidity"],0.845782, 5)
+            self.assertAlmostEqual(spot_check["UnmetCooling"],0.0, 2)
+            self.assertAlmostEqual(spot_check["OutdoorAirRelativeHumidity"],0.9, 2)
+            self.assertAlmostEqual(spot_check["Occupants"],3.0, 2)
+            self.assertAlmostEqual(spot_check["UnmetHeating"],0.310002, 5)
+            self.assertAlmostEqual(spot_check["HeatLoadToMeetThermostat"],-12.824641, 5)
+            self.assertAlmostEqual(spot_check["Central_AC"],0.0, 2)
+            self.assertAlmostEqual(spot_check["Month"],1,1)
+            self.assertAlmostEqual(spot_check["DayOfWeek"],2,1)
+            self.assertAlmostEqual(spot_check["DayOfMonth"],1,1)
+            self.assertAlmostEqual(spot_check["HourOfDay"],2,1)
+            self.assertEqual(spot_check["MasterBuilding"],"SingleFam3B_Elev")
+            self.assertAlmostEqual(spot_check["BuildingArea"],73.67211,5)
+            self.assertEqual(spot_check["Tier"],"Tier 3")
+            self.assertEqual(spot_check["Building"],"SingleFam3B_Elev")
+            self.assertAlmostEqual(spot_check["Hour"],1,1)
+
+
         
     def test_bad_dict(self):
         if self.run_all:

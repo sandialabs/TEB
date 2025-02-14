@@ -150,7 +150,7 @@ class TieredAnalysis(object):
     
     def __init__(self,tiered_load_spreadsheet_path,troubleshoot=False,
                  stop_time=8760,results_path="Results",run_parallel=False,
-                 run_name="", lpg_path=""):
+                 run_name="", lpg_path="",include_plots=False):
         
         """
         TODO - connect the Tiered Analysis to a database structure rather than
@@ -206,10 +206,14 @@ class TieredAnalysis(object):
             WARNING - you must assure that the weather file for the 
             LoadProfileGenerator analysis and the TEB analysis match each
             other.
+            
+        include_plots : bool : Optional, Default = False
+            If true, then the program will plot static electricity load
+            profiles bar plots for all loads (i.e. the non-critical tier)
         
         """
         
-        
+        self._include_plots = include_plots
         self.result_path = results_path
         if run_parallel:
             import multiprocessing as mp
@@ -870,7 +874,7 @@ class TieredAnalysis(object):
                     Elec = sch["Wh_per_day_per_m2"] * sch["Sch"] / sch["Sch"].sum() # should be normalized but this kind of schedule must sum to 1. and be of length = 24
                     sch_sum += Elec
                     heat_sch_sum += Elec * sch["FracHeat"] 
-            if tier == noncrit_tier:
+            if tier == noncrit_tier and self._include_plots:
                 fig,ax = plt.subplots(1,1,figsize=(10,10))
                 (pd.DataFrame(schdict).loc["Wh_per_day_per_m2"]/Unit_Convert.kW_to_Watts*building_area).plot.bar(ax=ax,title=name,grid=True,fontsize=12)
                 ax.set_ylabel("Static Electric Load Type (kWh/day)")
@@ -1860,10 +1864,10 @@ class RCBuilding(object):
         
         self.windows = windows
         self.ach_infiltration = infiltration_air_changes_per_hour
-        breakpoint()
+
         self.building = Zone(window_area=total_window_area,
               walls_area=total_wall_area,
-              floor_area=floor_area #self.total_area, The two floor model will have greater volume and total internal area
+              floor_area=floor_area, #self.total_area, The two floor model will have greater volume and total internal area
               room_vol=total_volume,
               total_internal_area=total_wall_area * fraction_internal_walls + 2 * floor_area,
               lighting_load=1.0,  # This changes based on the lights class
@@ -1911,8 +1915,7 @@ class RCBuilding(object):
         self.max_occupants = person_per_floor * num_floors
         self.occupant_schedule = occupant_schedule     # 
         self.len_occupant_sch = len(occupant_schedule)
-        
-        breakpoint()
+
         if lpg_data is None:
             # old 24 hr constant schedule model
             self.appliance_schedule = appliance_schedule   # 
@@ -1922,13 +1925,15 @@ class RCBuilding(object):
             # new 8760 agent-based household model for appliance energy consumption
             # Also convert kWh to Wh and normalize by building area because 
             # all other results are normalized by area.
-            self.appliance_schedule = appliance_schedule   # 
-            self.len_appliance_sch = len(appliance_schedule)
-            self.appliance_heat_schedule = appliance_heat_schedule
+            self.appliance_schedule = lpg_data["electricity"] * Unit_Convert.kW_to_Watts / self.total_area   # 
+            self.len_appliance_sch = len(self.appliance_schedule)
+            self.appliance_heat_schedule = lpg_data["internal_heat"] * Unit_Convert.kW_to_Watts / self.total_area
             
         # TODO find a model of sensible and latent heat gain as a function of 
         #      environment. We add 0 sensible heat past 97F and transition to
         #      only latent heat.
+        # I AM STILL TRYING TO FIND OUT IF LoadProfileGenerator includes heat
+        # from occupants.
         self.heat_gain_per_person = heat_gain_per_person
         
         # temperature initial condition
@@ -2004,6 +2009,7 @@ class RCBuilding(object):
         self.current_hour = start_hour
         self.T_prev = self.Location.weather_data['drybulb_C'].iloc[start_hour]
         self._preliminary_model_checks()
+
         for hr in np.arange(start_hour,stop_hour):
             self._time_step(troubleshoot)       
         
@@ -2032,9 +2038,9 @@ class RCBuilding(object):
         ts_app = np.mod(ts,self.len_appliance_sch)
         
         # static heat gains inside the structure
-        occupancy = self.max_occupants * self.occupant_schedule[ts_occ]
+        occupancy = self.max_occupants * self.occupant_schedule.iloc[ts_occ]
         internal_gains = (occupancy * self.heat_gain_per_person + 
-            self.total_area * self.appliance_heat_schedule[ts_app])
+            self.total_area * self.appliance_heat_schedule.iloc[ts_app])
     
         # Extract the outdoor temperature in for that hour
 
@@ -2210,7 +2216,7 @@ class RCBuilding(object):
 #        self.ForTroubleshooting["CoolingEnergy"].append(self.building.cooling_energy)
 #        self.ForTroubleshooting["COP"].append(self.building.cop)
         # Results
-        static_loads_power = self.total_area * self.appliance_schedule[ts_app]
+        static_loads_power = self.total_area * self.appliance_schedule.iloc[ts_app]
         
         self.Results["PlugInFans"].append(fan_power)
         self.Results["StaticElectricLoads"].append(static_loads_power)
