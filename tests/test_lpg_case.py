@@ -33,7 +33,7 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
         cls.results_path = "LPGResults"
         cls.data_path = "LPG_data"
         cls.data_path2 = "LPG_data2"
-        cls.run_all = False
+        cls.run_all = True
         cls.lpg_path_dict = {"Townhome2B_Elev":cls.data_path,
                              "Townhome2B_NotElev":cls.data_path2,
                              "SingleFam3B_Elev":cls.data_path,
@@ -115,33 +115,81 @@ class test_ElCano_BuildingEnergy_Demand_Load_Model(unittest.TestCase):
                                        lpg_path=self.lpg_path_dict)
             
             spot_check = obj.df_results.iloc[100,:]
-            self.assertAlmostEqual(spot_check["IndoorAirTemp"], 25.025658, 5)
-            self.assertAlmostEqual(spot_check["SolarGains"],0.0, 5)
-            self.assertAlmostEqual(spot_check["StructureTemp"],24.546807, 5)
-            self.assertAlmostEqual(spot_check["IndoorSurfaceTemp"],24.678683, 5)
-            self.assertAlmostEqual(spot_check["OutsideAirTemp"],23.9, 2)
-            self.assertAlmostEqual(spot_check["PlugInFans"],0.0, 2)
-            self.assertAlmostEqual(spot_check["StaticElectricLoads"],117.612585, 5)
-            self.assertAlmostEqual(spot_check["Refrigerators"],20.376264, 5)
-            self.assertAlmostEqual(spot_check["Wall_ACs"],0.0, 2)
-            self.assertAlmostEqual(spot_check["Lights"],165.0, 2)
-            self.assertAlmostEqual(spot_check["TotalElectricity"],302.988849, 5)
-            self.assertAlmostEqual(spot_check["IndoorAirRelativeHumidity"],0.845782, 5)
-            self.assertAlmostEqual(spot_check["UnmetCooling"],0.0, 2)
-            self.assertAlmostEqual(spot_check["OutdoorAirRelativeHumidity"],0.9, 2)
-            self.assertAlmostEqual(spot_check["Occupants"],3.0, 2)
-            self.assertAlmostEqual(spot_check["UnmetHeating"],0.310002, 5)
-            self.assertAlmostEqual(spot_check["HeatLoadToMeetThermostat"],-12.824641, 5)
-            self.assertAlmostEqual(spot_check["Central_AC"],0.0, 2)
+            self.assertAlmostEqual(spot_check["IndoorAirTemp (C)"], 25.025658, 5)
+            self.assertAlmostEqual(spot_check["SolarGains (W)"],0.0, 5)
+            self.assertAlmostEqual(spot_check["StructureTemp (C)"],24.546807, 5)
+            self.assertAlmostEqual(spot_check["IndoorSurfaceTemp (C)"],24.678683, 5)
+            self.assertAlmostEqual(spot_check["OutsideAirTemp (C)"],23.9, 2)
+            self.assertAlmostEqual(spot_check["PlugInFans (W)"],0.0, 2)
+            self.assertAlmostEqual(spot_check["StaticElectricLoads (W)"],117.612585, 5)
+            self.assertAlmostEqual(spot_check["Refrigerators (W)"],20.376264, 5)
+            self.assertAlmostEqual(spot_check["Wall_ACs (W)"],0.0, 2)
+            self.assertAlmostEqual(spot_check["Lights (W)"],165.0, 2)
+            self.assertAlmostEqual(spot_check["TotalElectricity (W)"],302.988849, 5)
+            self.assertAlmostEqual(spot_check["IndoorAirRelativeHumidity (%)"],0.845782, 5)
+            self.assertAlmostEqual(spot_check["UnmetCooling (W)"],0.0, 2)
+            self.assertAlmostEqual(spot_check["OutdoorAirRelativeHumidity (%)"],0.9, 2)
+            self.assertAlmostEqual(spot_check["Occupants (persons)"],3.0, 2)
+            self.assertAlmostEqual(spot_check["UnmetHeating (W)"],0.310002, 5)
+            self.assertAlmostEqual(spot_check["HeatLoadToMeetThermostat (W)"],-12.824641, 5)
+            self.assertAlmostEqual(spot_check["Central_AC (W)"],0.0, 2)
             self.assertAlmostEqual(spot_check["Month"],1,1)
             self.assertAlmostEqual(spot_check["DayOfWeek"],2,1)
             self.assertAlmostEqual(spot_check["DayOfMonth"],1,1)
             self.assertAlmostEqual(spot_check["HourOfDay"],2,1)
             self.assertEqual(spot_check["MasterBuilding"],"SingleFam3B_Elev")
-            self.assertAlmostEqual(spot_check["BuildingArea"],73.67211,5)
+            self.assertAlmostEqual(spot_check["BuildingArea (m2)"],73.67211,5)
             self.assertEqual(spot_check["Tier"],"Tier 3")
             self.assertEqual(spot_check["Building"],"SingleFam3B_Elev")
             self.assertAlmostEqual(spot_check["Hour"],1,1)
+            
+    def test_LPG_output(self):
+        
+        from TEB.simulator.lpg import LPG_data
+        
+        if self.run_all:
+            # Setup the results directory
+            if os.path.exists(self.results_path):
+                shutil.rmtree(self.results_path)
+            os.mkdir(self.results_path)
+            
+            # setup the TEB input spreadsheet path
+            self.tiered_load_single_building_example = os.path.join(os.path.dirname(__file__),"ExcelLoadData","TieredLoads_SingleBuilding.xlsx")
+            
+            print(self.lpg_path_dict)
+            single_lpg_path_dict = {"Building 1":self.data_path}
+            
+            
+            # You must have both all building names on the "Buildings" sheet and all repeat building names 
+            # (i.e., the same building but with a different equipment configuration.) on the "RepeatBuildingConfigs"
+            # sheet.
+
+            # create the Tiered Analysis object
+            obj = ec_be.TieredAnalysis(self.tiered_load_single_building_example,
+                                       False,
+                                       3,
+                                       self.results_path,
+                                       lpg_path=single_lpg_path_dict)
+            
+            obj2 = LPG_data(self.data_path)
+            
+            self.assertAlmostEqual(obj.df_results["StaticElectricLoads (W)"].iloc[0],
+                                   obj2.output['electricity'].iloc[0]*1000, 3)
+            
+            self.assertAlmostEqual(obj.df_results["StaticElectricLoads (W)"].iloc[1],
+                                   obj2.output['electricity'].iloc[1]*1000, 3)
+            
+            self.assertAlmostEqual(obj.df_results["StaticElectricLoads (W)"].iloc[2],
+                                   obj2.output['electricity'].iloc[2]*1000, 3)
+
+            self.assertAlmostEqual(obj.df_results["InternalHeatGains (W)"].iloc[0],
+                                   obj2.output['internal_heat'].iloc[0]*1000, 3)
+            
+            self.assertAlmostEqual(obj.df_results["InternalHeatGains (W)"].iloc[1],
+                                   obj2.output['internal_heat'].iloc[1]*1000, 3)
+            
+            self.assertAlmostEqual(obj.df_results["InternalHeatGains (W)"].iloc[2],
+                                   obj2.output['internal_heat'].iloc[2]*1000, 3)
 
 
         

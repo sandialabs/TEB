@@ -214,6 +214,7 @@ class TieredAnalysis(object):
         """
         
         self._include_plots = include_plots
+        self.warning_messages = []
         self.result_path = results_path
         if run_parallel:
             import multiprocessing as mp
@@ -344,6 +345,8 @@ class TieredAnalysis(object):
         self.buildings = building_objects
         self.input_data = dat
         
+        self.warning_messages = []
+        
         # build all of the results into a single dataframe
         return
     
@@ -364,7 +367,7 @@ class TieredAnalysis(object):
             if building_name not in lpg_path:
                 raise ValueError("If an LPG analysis is being defined, "
                     +f"every building must have a path! {building_name}"
-                    +f"is not included in the input lpg_path={lpg_path}")
+                    +f" is not included in the input lpg_path={lpg_path}")
             else:
                 _check_path_exists(lpg_path[building_name])
             
@@ -681,7 +684,7 @@ class TieredAnalysis(object):
         for master_building_name, building_data in dat.buildings.items():
             for tier_name,tier_dict in results[master_building_name].items():
                 for building_name,building_dict in tier_dict.items():
-                    
+
                     df = pd.DataFrame(building_dict)
                     df["Tier"] = tier_name
                     df["Building"] = building_name
@@ -1968,38 +1971,37 @@ class RCBuilding(object):
     def _initialize_results(self):
         # initialize results lists.
         self.ForTroubleshooting = {}
-        self.ForTroubleshooting["HeatingDemand"] = []
-        self.ForTroubleshooting["HeatingEnergy"] = []
-        self.ForTroubleshooting["CoolingDemand"] = []
-        self.ForTroubleshooting["CoolingEnergy"] = []
+        self.ForTroubleshooting["HeatingDemand (W)"] = []
+        self.ForTroubleshooting["HeatingEnergy (W)"] = []
+        self.ForTroubleshooting["CoolingDemand (W)"] = []
+        self.ForTroubleshooting["CoolingEnergy (W)"] = []
         self.ForTroubleshooting["COP"] = []
         self.Results = {}
-        self.Results["IndoorAirTemp"] = []
-        self.Results["SolarGains"] = []
-        self.Results["StructureTemp"] = []
-        self.Results["IndoorSurfaceTemp"] = []
-        self.Results["OutsideAirTemp"] = []
-        self.Results["PlugInFans"] = []
-        self.Results["StaticElectricLoads"] = []
-        self.Results["Refrigerators"] = []
-        self.Results["Wall_ACs"] = []
-        self.Results["Lights"] = []
-        self.Results["TotalElectricity"] = []
-        self.Results["IndoorAirRelativeHumidity"] = []
-        self.Results["TotalElectricity"] = []
-        self.Results["TotalElectricity"] = []
-        self.Results["UnmetCooling"] = []
-        self.Results["OutdoorAirRelativeHumidity"] = []
-        self.Results["Occupants"] = []
-        self.Results["UnmetHeating"] = []
-        self.Results["HeatLoadToMeetThermostat"] = []
-        self.Results["Central_AC"] = []
+        self.Results["IndoorAirTemp (C)"] = []
+        self.Results["SolarGains (W)"] = []
+        self.Results["StructureTemp (C)"] = []
+        self.Results["IndoorSurfaceTemp (C)"] = []
+        self.Results["OutsideAirTemp (C)"] = []
+        self.Results["PlugInFans (W)"] = []
+        self.Results["StaticElectricLoads (W)"] = []
+        self.Results["Refrigerators (W)"] = []
+        self.Results["Wall_ACs (W)"] = []
+        self.Results["Lights (W)"] = []
+        self.Results["TotalElectricity (W)"] = []
+        self.Results["IndoorAirRelativeHumidity (%)"] = []
+        self.Results["InternalHeatGains (W)"] = []
+        self.Results["UnmetCooling (W)"] = []
+        self.Results["OutdoorAirRelativeHumidity (%)"] = []
+        self.Results["Occupants (persons)"] = []
+        self.Results["UnmetHeating (W)"] = []
+        self.Results["HeatLoadToMeetThermostat (W)"] = []
+        self.Results["Central_AC (W)"] = []
         self.Results["Month"] = []
         self.Results["DayOfWeek"] = []
         self.Results["DayOfMonth"] = []
         self.Results["HourOfDay"] = []
         self.Results["MasterBuilding"] = []
-        self.Results["BuildingArea"] = []
+        self.Results["BuildingArea (m2)"] = []
         self.Results["Date"] = []
         
     def run_model(self,start_hour,stop_hour,troubleshoot,master_building_name):
@@ -2218,26 +2220,28 @@ class RCBuilding(object):
         # Results
         static_loads_power = self.total_area * self.appliance_schedule.iloc[ts_app]
         
-        self.Results["PlugInFans"].append(fan_power)
-        self.Results["StaticElectricLoads"].append(static_loads_power)
-        self.Results["Refrigerators"].append(fridge_power)
-        self.Results["Wall_ACs"].append(wall_ac_power)
-        self.Results["Central_AC"].append(central_ac_power)
-        self.Results["Lights"].append(light_power)
+        self.Results["PlugInFans (W)"].append(fan_power)
+        self.Results["StaticElectricLoads (W)"].append(static_loads_power)
+        self.Results["Refrigerators (W)"].append(fridge_power)
+        self.Results["Wall_ACs (W)"].append(wall_ac_power)
+        self.Results["Central_AC (W)"].append(central_ac_power)
+        self.Results["Lights (W)"].append(light_power)
         # TODO - ALL Of this depends on a 1 hour time step so that these go from W to W*hr
-        self.Results["TotalElectricity"].append(static_loads_power + 
+        self.Results["TotalElectricity (W)"].append(static_loads_power + 
                                               fan_power + fridge_power + wall_ac_power + light_power + central_ac_power)
-        self.Results["IndoorAirTemp"].append(self.building.t_air)
-        self.Results["StructureTemp"].append(self.building.t_m_next)
-        self.Results["IndoorSurfaceTemp"].append(self.building.t_s)
-        self.Results["IndoorAirRelativeHumidity"].append(self.internal_rh)
-        self.Results["OutdoorAirRelativeHumidity"].append(external_rh)
-        self.Results["OutsideAirTemp"].append(T_out)
-        self.Results["SolarGains"].append(solar_gains)
-        self.Results["UnmetCooling"].append(unmet_cooling)
-        self.Results["UnmetHeating"].append(unmet_heating)
-        self.Results["Occupants"].append(occupancy)
-        self.Results["HeatLoadToMeetThermostat"].append(self.building.energy_demand_unrestricted)
+        self.Results["IndoorAirTemp (C)"].append(self.building.t_air)
+        self.Results["StructureTemp (C)"].append(self.building.t_m_next)
+        self.Results["IndoorSurfaceTemp (C)"].append(self.building.t_s)
+        self.Results["IndoorAirRelativeHumidity (%)"].append(self.internal_rh)
+        self.Results["OutdoorAirRelativeHumidity (%)"].append(external_rh)
+        self.Results["OutsideAirTemp (C)"].append(T_out)
+        self.Results["SolarGains (W)"].append(solar_gains)
+        self.Results["UnmetCooling (W)"].append(unmet_cooling)
+        self.Results["UnmetHeating (W)"].append(unmet_heating)
+        self.Results["Occupants (persons)"].append(occupancy)
+        self.Results["HeatLoadToMeetThermostat (W)"].append(self.building.energy_demand_unrestricted)
+        #Not sure if this (line 2244) is right! Oh Well!
+        self.Results["InternalHeatGains (W)"].append(self.appliance_heat_schedule.iloc[self.current_hour]*self.total_area)
 
         month = self.Location.weather_data["actual date"][self.current_hour].month
         day = self.Location.weather_data["actual date"][self.current_hour].day
@@ -2253,7 +2257,7 @@ class RCBuilding(object):
         self.Results["HourOfDay"].append(np.mod(self.current_hour, 24)+1)
         self.Results["MasterBuilding"].append(self.master_building_name) # This establishes what buildings are different use cases of the same
                                                                    # underlying structure.
-        self.Results["BuildingArea"].append(self.total_area)
+        self.Results["BuildingArea (m2)"].append(self.total_area)
         
     def _complex_appliances(self,T_air_in,hour_of_day,hour_of_year, Pressure, static_heat_loads,
                             transmitted_illuminance,occupancy,ts,T_out,normal_direct_illuminance):
